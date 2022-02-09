@@ -1,21 +1,47 @@
 import datetime
 import json
+from decimal import Decimal
+from typing import Union, Dict
 
+import pandas
 import prophet
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from prophet import Prophet
 from prophet.serialize import model_from_json, model_to_json
 
+from markets import Market
+from other import PRECISION
 
-MODEL_FILENAME = "model.json"
+
+def stan_init(m):
+    """Retrieve parameters from a trained model.
+
+    Retrieve parameters from a trained model in the format
+    used to initialize a new Stan model.
+
+    Parameters
+    ----------
+    m: A trained model of the Prophet class.
+
+    Returns
+    -------
+    A Dictionary containing retrieved parameters of m.
+
+    """
+    res = {}
+    for pname in ['k', 'm', 'sigma_obs']:
+        res[pname] = m.params[pname][0][0]
+    for pname in ['delta', 'beta']:
+        res[pname] = m.params[pname][0]
+    return res
 
 
 class Prediction(object):
-    prediction: float
-    lower: float
-    upper: float
+    prediction: Decimal
+    lower: Decimal
+    upper: Decimal
 
-    def __init__(self, prediction, low, high):
+    def __init__(self, prediction: Decimal, low: Decimal, high: Decimal):
         self.prediction = prediction
         self.lower = low
         self.upper = high
@@ -26,13 +52,20 @@ class Prediction(object):
 
 class Predictor(object):
     m: prophet.Prophet
+    forecast: Union[DataFrame, Series]
+    predictions: Dict[datetime.date, Prediction]
+    market: Market
+
+    def __init__(self, market: Market):
+        self.predictions = {}
+        self.market = market
 
     def load(self):
-        with open(MODEL_FILENAME, 'r') as fin:
+        with open(self.market.currency.value + ".json", 'r') as fin:
             self.m = model_from_json(json.load(fin))
 
     def save(self):
-        with open(MODEL_FILENAME, 'w') as fout:
+        with open(self.market.currency.value + ".json", 'w') as fout:
             json.dump(model_to_json(self.m), fout)
 
     def new_model(self, training_data: DataFrame):
@@ -40,21 +73,22 @@ class Predictor(object):
 
         self.m.fit(training_data)
 
-    def next_day_prediction(self) -> Prediction:
-        """
-        :return: Returns prediction for the next trading day.
-        """
+    def update_model(self, date: datetime.date, price: float):
+        new_df = pandas.concat([self.m.history, pandas.DataFrame([(date, price)], columns=["ds", "y"])], ignore_index=True)
+        self.m = Prophet().fit(new_df, init=stan_init(self.m))
 
-        future = self.m.make_future_dataframe(periods=10)
+    def make_forecast(self, number_of_days=10):
+        future = self.m.make_future_dataframe(periods=number_of_days)
         future = future[future["ds"].dt.dayofweek < 5]  # Remove weekends from future df
 
-        forecast = self.m.predict(future)
+        self.forecast = self.m.predict(future)
 
-        next_day = None
+        for i, row in self.forecast.iterrows():
+            self.predictions[row["ds"].date()] = Prediction(
+                Decimal(row["yhat"]).quantize(PRECISION),
+                Decimal(row["yhat_lower"]).quantize(PRECISION),
+                Decimal(row["yhat_upper"]).quantize(PRECISION)
+            )
 
-        for k, row in forecast.iterrows():
-            if row["ds"].date() > datetime.datetime.now().date():
-                next_day = row
-                break
-
-        return Prediction(next_day["yhat"], next_day["yhat_lower"], next_day["yhat_upper"])
+    def get_prediction_for_date(self, date: datetime.date) -> Prediction:
+        return self.predictions[date]
