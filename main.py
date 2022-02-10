@@ -10,9 +10,6 @@ from simulation import Strategy, Exchange
 decimal.getcontext().prec = 8
 
 if __name__ == "__main__":
-    # Run a simulation
-    print("Running simulation")
-
     markets = [
         Market(Currency.GBP, "gbpmax.csv"),
         Market(Currency.CAD, "cadmax.csv"),
@@ -39,18 +36,19 @@ if __name__ == "__main__":
 
     strategy = Strategy(markets, exchange)
 
-    # For simulation
-    strategy.simulate_period(start_date, end_date)
+    # Run a simulation
+    # print("Running simulation")
+    # strategy.simulate_period(start_date, end_date)
 
     # For non-simulation
-    # current_date = datetime.date.today() - datetime.timedelta(days=1)
-    #
-    # for market in markets:
-    #     exchange.update_price(market, market.get_price_by_date(current_date))
-    #
-    #     print(f"{market.currency.name} ({exchange.prices[market]})")
-    #     orders = strategy.get_orders_for_date(market, current_date)
-    #     for order in orders:
-    #         print(order)
+    current_date = datetime.date.today() - datetime.timedelta(days=1)
+
+    for market in markets:
+        exchange.update_price(market, market.get_price_by_date(current_date))
+
+        print(f"{market.currency.name} ({exchange.prices[market]})")
+        orders = strategy.get_orders_for_date(market, current_date)
+        for order in orders:
+            print(order)
 
     print("Finished")
