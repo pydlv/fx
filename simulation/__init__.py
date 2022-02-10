@@ -1,83 +1,96 @@
 import datetime
 import warnings
-from typing import Iterable, Dict
+from typing import Iterable, Dict, List
 
 import pandas
 
 from agent import Agent
 from markets import Market, Currency
 from predictor import Predictor
-from simulation.exchange import Exchange
+from simulation.exchange import Exchange, Order
 
 warnings.filterwarnings("ignore")
 
 
-def simulate_period(start_date: datetime.date, end_date: datetime.date, markets: Iterable[Market], exchange: Exchange):
-    results = []
+class Strategy(object):
+    markets: List[Market]
+    exchange: Exchange
+    predictors: Dict[Market, Predictor]
+    agent: Agent
 
-    predictors: Dict[Market, Predictor] = {}
+    def __init__(self, markets: Iterable[Market], exchange: Exchange):
+        self.markets = list(markets)
+        self.exchange = exchange
 
-    for market in markets:
-        predictor = Predictor(market)
+        self.predictors: Dict[Market, Predictor] = {}
 
-        try:
-            predictor.load()
-        except FileNotFoundError:
-            print("Model not found. Generating new model for " + market.currency.name)
+        self.agent = Agent(exchange)
 
-            predictor.new_model(market.df)
+        for market in markets:
+            predictor = Predictor(market)
 
-            predictor.save()
+            try:
+                predictor.load()
+            except FileNotFoundError:
+                print("Model not found. Generating new model for " + market.currency.name)
 
-        predictor.make_forecast()
+                predictor.new_model(market.df)
 
-        predictors[market] = predictor
+                predictor.save()
 
-    agent = Agent(exchange)
+            predictor.make_forecast()
 
-    current_date = start_date
-    while current_date < end_date:
-        if current_date.isoweekday() in [6, 7]:
+            self.predictors[market] = predictor
+
+    def get_orders_for_date(self, market: Market, date: datetime.date) -> List[Order]:
+        prediction = self.predictors[market].get_prediction_for_date(date)
+
+        return self.agent.decide_v2(market, prediction)
+
+    def simulate_period(self, start_date: datetime.date, end_date: datetime.date):
+        results = []
+
+        current_date = start_date
+        while current_date < end_date:
+            if current_date.isoweekday() in [6, 7]:
+                current_date += datetime.timedelta(days=1)
+                continue  # Skip weekends
+
+            exchange.date = current_date
+
+            # Process orders with the new day's price
+            for market in self.markets:
+                try:
+                    price = market.get_price_by_date(current_date)
+                except KeyError:
+                    # Some markets may be missing prices for certain days, just skip in that case
+                    continue
+
+                # Update the latest price and process orders
+                self.exchange.update_price(market, price)
+
+            # Orders should only last for 1 day, clear any old ones
+            self.exchange.clear_orders()
+
+            for market in self.markets:
+                try:
+                    new_orders = self.get_orders_for_date(market, current_date)
+                except KeyError:
+                    continue
+
+                for order in new_orders:
+                    self.exchange.add_order(market, order)
+
+            total_account_value = sum(
+                [
+                    self.exchange.balances[market.currency] * self.exchange.prices[market] for market in self.markets
+                ],
+                self.exchange.balances[Currency.USD]
+            )
+            results.append([
+                current_date, total_account_value
+            ])
+
             current_date += datetime.timedelta(days=1)
-            continue  # Skip weekends
 
-        exchange.date = current_date
-
-        # Process orders with the new day's price
-        for market in markets:
-            try:
-                price = market.get_price_by_date(current_date)
-            except KeyError:
-                # Some markets may be missing prices for certain days, just skip in that case
-                continue
-
-            # Update the latest price and process orders
-            exchange.update_price(market, price)
-
-        # Orders should only last for 1 day, clear any old ones
-        exchange.clear_orders()
-
-        for market in markets:
-            try:
-                prediction = predictors[market].get_prediction_for_date(current_date)
-            except KeyError:
-                continue
-
-            new_orders = agent.decide_v2(market, prediction)
-
-            for order in new_orders:
-                exchange.add_order(market, order)
-
-        total_account_value = sum(
-            [
-                exchange.balances[market.currency] * exchange.prices[market] for market in markets
-            ],
-            exchange.balances[Currency.USD]
-        )
-        results.append([
-            current_date, total_account_value
-        ])
-
-        current_date += datetime.timedelta(days=1)
-
-    pandas.DataFrame(results, columns=["Date", "Value (USD)"]).to_csv("simulation_results.csv")
+        pandas.DataFrame(results, columns=["Date", "Value (USD)"]).to_csv("simulation_results.csv")

@@ -57,9 +57,12 @@ class Agent(object):
         return orders
 
     def decide_v2(self, market: Market, prediction: Prediction) -> List[Order]:
-        min_order_size = Decimal("0.1")
+        min_order_size = Decimal("1")  # USD
 
-        price_percents = [Decimal("0.5"), Decimal("0.75"), Decimal("0.9")]
+        price_percents = [Decimal("0.5"), Decimal("0.75"), Decimal("0.9")]  # 5.6
+        # price_percents = [Decimal("0.3"), Decimal("0.475"), Decimal("0.65"), Decimal("0.825"), Decimal("1")]  #5.4
+        # price_percents = [Decimal("0.5"), Decimal("0.75"), Decimal("1")]  # 5.4
+        # price_percents = [Decimal("0.33"), Decimal("0.66"), Decimal("0.9")]  # 5.2
         quantity_percent = Decimal("0.05")
         qp = (Decimal("1") / len(price_percents))
 
@@ -72,7 +75,7 @@ class Agent(object):
 
             sell_quantity = self.exchange.balances[market.currency] * qp
 
-            if sell_quantity >= min_order_size:
+            if sell_quantity * sell_price >= min_order_size:
                 orders.append(Order(OrderType.Sell, sell_quantity, sell_price))
 
         lower_spread = prediction.prediction - prediction.lower
@@ -82,7 +85,7 @@ class Agent(object):
             buy_value = self.exchange.balances[Currency.USD] * qp
             buy_quantity = buy_value / buy_price
 
-            if buy_quantity >= min_order_size:
+            if buy_value >= min_order_size:
                 orders.append(Order(OrderType.Buy, buy_quantity, buy_price))
 
         return orders

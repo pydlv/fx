@@ -10,6 +10,8 @@ from util import load_data
 
 
 class Currency(Enum):
+    NZD = "NZD"
+    JPY = "JPY"
     USD = "USD"
     GBP = "GBP"
     CAD = "CAD"
