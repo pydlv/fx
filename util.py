@@ -7,4 +7,4 @@ def load_data(filename: str) -> DataFrame:
     df = df[["Date", "Close"]]
     df.columns = ["ds", "y"]
 
-    return df
+    return df[df["y"].notnull()]

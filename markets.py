@@ -13,6 +13,9 @@ class Currency(Enum):
     USD = "USD"
     GBP = "GBP"
     CAD = "CAD"
+    CHF = "CHF"
+    EUR = "EUR"
+    AUD = "AUD"
 
 
 class Market(object):

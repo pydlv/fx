@@ -41,18 +41,29 @@ def simulate_period(start_date: datetime.date, end_date: datetime.date, markets:
             current_date += datetime.timedelta(days=1)
             continue  # Skip weekends
 
+        exchange.date = current_date
+
+        # Process orders with the new day's price
         for market in markets:
-            price = market.get_price_by_date(current_date)
+            try:
+                price = market.get_price_by_date(current_date)
+            except KeyError:
+                # Some markets may be missing prices for certain days, just skip in that case
+                continue
 
             # Update the latest price and process orders
             exchange.update_price(market, price)
 
-            # Clear any leftover orders in preparation for new calculations
-            exchange.orders[market].clear()
+        # Orders should only last for 1 day, clear any old ones
+        exchange.clear_orders()
 
-            prediction = predictors[market].get_prediction_for_date(current_date)
+        for market in markets:
+            try:
+                prediction = predictors[market].get_prediction_for_date(current_date)
+            except KeyError:
+                continue
 
-            new_orders = agent.decide(market, prediction)
+            new_orders = agent.decide_v2(market, prediction)
 
             for order in new_orders:
                 exchange.add_order(market, order)
