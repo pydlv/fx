@@ -61,28 +61,29 @@ class Agent(object):
 
         price_percents = [Decimal("0.5"), Decimal("0.75"), Decimal("0.9")]
         quantity_percent = Decimal("0.05")
+        qp = (Decimal("1") / len(price_percents))
 
         orders = []
 
         upper_spread = prediction.upper - prediction.prediction
 
-        sell_price = upper_spread * price_percent + prediction.prediction
+        for price_percent in price_percents:
+            sell_price = upper_spread * price_percent + prediction.prediction
 
-        sell_quantity = self.exchange.balances[market.currency] * quantity_percent
+            sell_quantity = self.exchange.balances[market.currency] * qp
 
-        if sell_quantity >= min_order_size:
-            orders.append(Order(OrderType.Sell, sell_quantity, sell_price))
+            if sell_quantity >= min_order_size:
+                orders.append(Order(OrderType.Sell, sell_quantity, sell_price))
 
         lower_spread = prediction.prediction - prediction.lower
 
-        buy_price = prediction.prediction - lower_spread * price_percent
-        buy_value = self.exchange.balances[Currency.USD] * quantity_percent
-        buy_quantity = buy_value / buy_price
+        for price_percent in price_percents:
+            buy_price = prediction.prediction - lower_spread * price_percent
+            buy_value = self.exchange.balances[Currency.USD] * qp
+            buy_quantity = buy_value / buy_price
 
-
-
-        if buy_quantity >= min_order_size:
-            orders.append(Order(OrderType.Buy, buy_quantity, buy_price))
+            if buy_quantity >= min_order_size:
+                orders.append(Order(OrderType.Buy, buy_quantity, buy_price))
 
         return orders
 
