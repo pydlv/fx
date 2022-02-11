@@ -1,13 +1,15 @@
-import datetime
 import decimal
-from decimal import Decimal
+import logging
 from datetime import date
+from decimal import Decimal
 
 from markets import Market, Currency
 from other import PRECISION
 from simulation import Strategy, Exchange
 
 decimal.getcontext().prec = 8
+
+logging.basicConfig(filename='runlog.log', encoding='utf-8', level=logging.INFO)
 
 if __name__ == "__main__":
     markets = [
@@ -27,28 +29,28 @@ if __name__ == "__main__":
 
     for market in markets:
         try:
-            exchange.update_price(market, market.get_price_by_date(start_date))
+            market.price = market.get_price_by_date(start_date)
         except KeyError:
             # The market does not have data for the start date, just choose the first price
-            exchange.update_price(market, Decimal(market.df.iloc[0]["y"]).quantize(PRECISION))
+            market.price = Decimal(market.df.iloc[0]["y"]).quantize(PRECISION)
 
     exchange.set_balance(Currency.USD, Decimal(1000))
 
     strategy = Strategy(markets, exchange)
 
     # Run a simulation
-    # print("Running simulation")
-    # strategy.simulate_period(start_date, end_date)
+    print("Running simulation")
+    strategy.simulate_period(start_date, end_date)
 
     # For non-simulation
-    current_date = datetime.date.today() - datetime.timedelta(days=1)
-
-    for market in markets:
-        exchange.update_price(market, market.get_price_by_date(current_date))
-
-        print(f"{market.currency.name} ({exchange.prices[market]})")
-        orders = strategy.get_orders_for_date(market, current_date)
-        for order in orders:
-            print(order)
+    # current_date = datetime.date.today() - datetime.timedelta(days=2)
+    #
+    # for market in markets:
+    #     exchange.update_price(market, market.get_price_by_date(current_date))
+    #
+    #     print(f"{market.currency.name} ({exchange.prices[market]})")
+    #     orders = strategy.get_orders_for_date(market, current_date)
+    #     for order in orders:
+    #         print(order)
 
     print("Finished")

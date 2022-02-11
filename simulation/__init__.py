@@ -1,3 +1,4 @@
+import copy
 import datetime
 import warnings
 from typing import Iterable, Dict, List
@@ -42,10 +43,20 @@ class Strategy(object):
 
             self.predictors[market] = predictor
 
-    def get_orders_for_date(self, market: Market, date: datetime.date) -> List[Order]:
-        prediction = self.predictors[market].get_prediction_for_date(date)
+    def get_orders_for_date(self, markets: List[Market], date: datetime.date) -> List[Order]:
+        # Some markets might not have a prediction for a particular date, so don't include them.
+        markets_to_include = []
 
-        return self.agent.decide_v2(market, prediction)
+        for market in markets:
+            try:
+                prediction = self.predictors[market].get_prediction_for_date(date)
+                markets_to_include.append(market)
+            except KeyError:
+                continue
+
+            market.prediction = prediction
+
+        return self.agent.decide_v3(markets_to_include)
 
     def simulate_period(self, start_date: datetime.date, end_date: datetime.date):
         results = []
@@ -56,7 +67,7 @@ class Strategy(object):
                 current_date += datetime.timedelta(days=1)
                 continue  # Skip weekends
 
-            exchange.date = current_date
+            self.exchange.date = current_date
 
             # Process orders with the new day's price
             for market in self.markets:
@@ -67,23 +78,26 @@ class Strategy(object):
                     continue
 
                 # Update the latest price and process orders
-                self.exchange.update_price(market, price)
+                market.price = price
+                self.exchange.process_orders(market)
 
             # Orders should only last for 1 day, clear any old ones
             self.exchange.clear_orders()
 
-            for market in self.markets:
-                try:
-                    new_orders = self.get_orders_for_date(market, current_date)
-                except KeyError:
-                    continue
+            start_balances = copy.deepcopy(self.exchange.balances)
 
-                for order in new_orders:
-                    self.exchange.add_order(market, order)
+            new_orders = self.get_orders_for_date(self.markets, current_date)
+
+            for order in new_orders:
+                self.exchange.add_order(order.market, order)
+
+            # Do a quick check to make sure all our orders filled
+            for market in self.markets:
+                assert len(self.exchange.orders[market]) == 0
 
             total_account_value = sum(
                 [
-                    self.exchange.balances[market.currency] * self.exchange.prices[market] for market in self.markets
+                    self.exchange.balances[market.currency] * market.price for market in self.markets
                 ],
                 self.exchange.balances[Currency.USD]
             )

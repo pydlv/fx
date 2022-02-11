@@ -1,30 +1,40 @@
 import datetime
 import enum
+import logging
 from decimal import Decimal
 from typing import Set, Dict, Iterable, List, Optional
 
 from markets import Market, Currency
 
-ACCEPTABLE_ROUNDING_ERROR = Decimal("2e-5")
+ACCEPTABLE_ROUNDING_ERROR = Decimal("2e-4")
+
+
+class OrderDirection(enum.Enum):
+    Buy = "BUY"
+    Sell = "SELL"
 
 
 class OrderType(enum.Enum):
-    Buy = "BUY"
-    Sell = "SELL"
+    Market = "MARKET"
+    Limit = "LIMIT"
 
 
 class Order(object):
     order_type: OrderType
     quantity: Decimal
     price: Decimal
+    direction: OrderDirection
+    market: Market
 
-    def __init__(self, order_type: OrderType, quantity: Decimal, price: Decimal):
+    def __init__(self, *, market: Market, order_type: OrderType, direction: OrderDirection, quantity: Decimal, price: Decimal):
         self.order_type = order_type
         self.quantity = quantity
         self.price = price
+        self.direction = direction
+        self.market = market
 
     def __str__(self):
-        return f"{self.order_type.name} {self.quantity} @ {self.price}"
+        return f"{self.direction.name} {self.market.currency.name} {self.quantity} @ {self.price} {self.order_type.name}"
 
 
 class Exchange(object):
@@ -32,8 +42,6 @@ class Exchange(object):
 
     balances: Dict[Currency, Decimal]
     balance_allocations = Dict[Currency, Decimal]
-
-    prices: Dict[Market, Decimal]
 
     orders: Dict[Market, Set[Order]]
 
@@ -44,7 +52,6 @@ class Exchange(object):
 
         self.balances = {}
         self.balance_allocations = {}
-        self.prices = {}
 
         self.orders = {}
 
@@ -67,10 +74,6 @@ class Exchange(object):
     #            f"Orders:\n" + \
     #            "\n".join(str(order) for order in self.orders)
 
-    def update_price(self, market: Market, new_price: Decimal):
-        self.prices[market] = new_price
-        self.process_orders(market)
-
     def set_balance(self, currency: Currency, new_balance: Decimal):
         self.balances[currency] = new_balance
 
@@ -88,32 +91,37 @@ class Exchange(object):
         :return:
         """
         for order in self.orders[market].copy():
-            if order.order_type == OrderType.Buy and self.prices[market] <= order.price:
+            if order.direction == OrderDirection.Buy:
+                if order.order_type == OrderType.Limit and market.price > order.price:
+                    continue
+                else:
+                    order.price = market.price
+
                 # Execute the order at order.price
                 order_total = order.price * order.quantity
                 # assert self.balances[Currency.USD] >= order_total or abs(self.balances[Currency.USD] - order_total) <= ACCEPTABLE_ROUNDING_ERROR
 
-                # If we don't have enough funds to execute, just skip
-                if self.balances[Currency.USD] < order_total:
-                    continue
+                assert self.balances[Currency.USD] >= order_total or abs(self.balances[Currency.USD] - order_total) <= ACCEPTABLE_ROUNDING_ERROR
 
                 self.balances[Currency.USD] -= order_total
                 self.balances[market.currency] += order.quantity
 
-                print(self.date, "Executing order:", order, market.currency.name)
+                logging.info(str(self.date) + " Executing order: " + str(order))
 
                 self.orders[market].remove(order)
-            elif order.order_type == OrderType.Sell and self.prices[market] >= order.price:
-                # assert self.balances[market.currency] >= order.quantity or abs(self.balances[market.currency] - order.quantity) <= ACCEPTABLE_ROUNDING_ERROR
-
-                if self.balances[market.currency] < order.quantity:
+            elif order.direction == OrderDirection.Sell:
+                if order.order_type == OrderType.Limit and market.price < order.price:
                     continue
+                else:
+                    order.price = market.price
+
+                assert self.balances[market.currency] >= order.quantity or abs(self.balances[market.currency] - order.quantity) <= ACCEPTABLE_ROUNDING_ERROR
 
                 order_total = order.price * order.quantity
 
                 self.balances[Currency.USD] += order_total
                 self.balances[market.currency] -= order.quantity
 
-                print(self.date, "Executing order:", order, market.currency.name)
+                logging.info(str(self.date) + " Executing order: " + str(order))
 
                 self.orders[market].remove(order)

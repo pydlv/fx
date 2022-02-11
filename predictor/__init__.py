@@ -11,6 +11,7 @@ from prophet.serialize import model_from_json, model_to_json
 
 from markets import Market
 from other import PRECISION
+from predictor.prediction import Prediction
 
 
 def stan_init(m):
@@ -36,20 +37,6 @@ def stan_init(m):
     return res
 
 
-class Prediction(object):
-    prediction: Decimal
-    lower: Decimal
-    upper: Decimal
-
-    def __init__(self, prediction: Decimal, low: Decimal, high: Decimal):
-        self.prediction = prediction
-        self.lower = low
-        self.upper = high
-
-    def __str__(self):
-        return f"Prediction: {self.prediction}, Upper: {self.upper}, Lower: {self.lower}"
-
-
 class Predictor(object):
     m: prophet.Prophet
     forecast: Union[DataFrame, Series]
@@ -61,11 +48,11 @@ class Predictor(object):
         self.market = market
 
     def load(self):
-        with open(self.market.currency.value + ".json", 'r') as fin:
+        with open("models/" + self.market.currency.value + ".json", 'r') as fin:
             self.m = model_from_json(json.load(fin))
 
     def save(self):
-        with open(self.market.currency.value + ".json", 'w') as fout:
+        with open("models/" + self.market.currency.value + ".json", 'w') as fout:
             json.dump(model_to_json(self.m), fout)
 
     def new_model(self, training_data: DataFrame):
