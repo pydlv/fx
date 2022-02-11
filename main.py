@@ -1,3 +1,4 @@
+import datetime
 import decimal
 import logging
 from datetime import date
@@ -46,11 +47,10 @@ if __name__ == "__main__":
     # current_date = datetime.date.today() - datetime.timedelta(days=2)
     #
     # for market in markets:
-    #     exchange.update_price(market, market.get_price_by_date(current_date))
+    #     market.price = market.get_price_by_date(current_date)
     #
-    #     print(f"{market.currency.name} ({exchange.prices[market]})")
-    #     orders = strategy.get_orders_for_date(market, current_date)
-    #     for order in orders:
-    #         print(order)
+    # orders = strategy.get_orders_for_date(markets, current_date)
+    # for order in orders:
+    #     print(order)
 
     print("Finished")
